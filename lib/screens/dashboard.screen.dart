@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_routinggp/components/sidebar.components.dart';
 import 'package:flutter_application_routinggp/screens/deploiement.screen.dart';
 import 'package:flutter_application_routinggp/screens/routine.screen.dart';
+import 'package:flutter_application_routinggp/screens/routineform.screen.dart';
 
 class Dashboard extends StatelessWidget {
   Dashboard({super.key});

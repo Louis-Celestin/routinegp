@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_routinggp/models/routine.models.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:permission_handler/permission_handler.dart';
 
 class RoutineFormPage extends StatefulWidget {
   @override
@@ -17,7 +19,38 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
   double longitudeReel = 0.0;
   List<Tpe> tpeList = [];
   bool _isLoading = false;
-  bool _isSuccess = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _requestLocationPermission();
+  }
+
+  Future<void> _requestLocationPermission() async {
+    var status = await Permission.location.status;
+    if (status.isDenied) {
+      if (await Permission.location.request().isGranted) {
+        _getCurrentLocation();
+      }
+    } else if (status.isGranted) {
+      _getCurrentLocation();
+    } else if (status.isPermanentlyDenied) {
+      openAppSettings();
+    }
+  }
+
+  void _getCurrentLocation() async {
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high);
+      setState(() {
+        latitudeReel = position.latitude;
+        longitudeReel = position.longitude;
+      });
+    } catch (e) {
+      print("Erreur lors de la récupération de la position: $e");
+    }
+  }
 
   void _addTpe() {
     setState(() {
@@ -33,15 +66,13 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
     });
   }
 
-  void _removeTpe(int index) {
-    setState(() {
-      tpeList.removeAt(index);
-    });
-  }
-
   Future<void> _submitForm() async {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
+
+      setState(() {
+        _isLoading = true;
+      });
 
       final routineData = {
         'commercialId': commercialId,
@@ -52,49 +83,43 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
         'tpeList': tpeList.map((tpe) => tpe.toJson()).toList(),
       };
 
-      setState(() {
-        _isLoading = true;
-        _isSuccess = false;
-      });
-
-      // Envoi des données au serveur
       try {
         final response = await http.post(
-          Uri.parse('http://172.31.1.51:5500/api/makeRoutine'),
+          Uri.parse('http://172.31.1.55:5500/api/makeRoutine'),
           headers: {
             'Content-Type': 'application/json',
           },
           body: jsonEncode(routineData),
         );
-        print(routineData);
+        setState(() {
+          _isLoading = false;
+        });
         if (response.statusCode == 200) {
-          // Traitez la réponse ici, par exemple, afficher un message de succès
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Routine enregistrée avec succès')),
           );
-          setState(() {
-            _isSuccess = true;
-          });
-          Navigator.pop(
-              context, true); // Retourne à la page précédente avec succès
+          Navigator.pop(context, true);
         } else {
           print(response.body);
-          // Gérez les erreurs ici, par exemple, afficher un message d'erreur
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Échec de l\'enregistrement de la routine')),
           );
         }
       } catch (e) {
-        // Gérez les exceptions ici, par exemple, afficher un message d'erreur
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : ${e.toString()}')),
-        );
-      } finally {
         setState(() {
           _isLoading = false;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur : ${e.toString()}')),
+        );
       }
     }
+  }
+
+  void _removeTpe(int index) {
+    setState(() {
+      tpeList.removeAt(index);
+    });
   }
 
   @override
@@ -151,28 +176,16 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
               TextFormField(
                 decoration: InputDecoration(labelText: 'Latitude Réelle'),
                 keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value!.isEmpty) {
-                    return 'Veuillez entrer la latitude';
-                  }
-                  return null;
-                },
-                onSaved: (value) {
-                  latitudeReel = double.parse(value!);
-                },
+                enabled: false,
+                initialValue:
+                    latitudeReel != null ? latitudeReel.toString() : '',
               ),
               TextFormField(
                 decoration: InputDecoration(labelText: 'Longitude Réelle'),
                 keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value!.isEmpty) {
-                    return 'Veuillez entrer la longitude';
-                  }
-                  return null;
-                },
-                onSaved: (value) {
-                  longitudeReel = double.parse(value!);
-                },
+                enabled: false,
+                initialValue:
+                    longitudeReel != null ? longitudeReel.toString() : '',
               ),
               ...tpeList.asMap().entries.map((entry) {
                 int index = entry.key;
@@ -283,9 +296,7 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
                     ? CircularProgressIndicator(
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       )
-                    : _isSuccess
-                        ? Icon(Icons.check, color: Colors.white)
-                        : Text('Soumettre'),
+                    : Text('Soumettre'),
               ),
             ],
           ),

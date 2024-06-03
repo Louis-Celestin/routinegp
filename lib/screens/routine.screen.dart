@@ -4,6 +4,7 @@ import 'package:flutter_application_routinggp/models/routine.models.dart';
 import 'package:flutter_application_routinggp/screens/routineform.screen.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class RoutinePage extends StatefulWidget {
   @override
@@ -23,7 +24,7 @@ class _RoutinePageState extends State<RoutinePage> {
 
   void loadRoutineData() async {
     final response =
-        await http.get(Uri.parse('http://172.31.1.51:5500/api/routines'));
+        await http.get(Uri.parse('http://172.31.1.26:5500/api/routines'));
 
     if (response.statusCode == 200) {
       try {
@@ -40,6 +41,13 @@ class _RoutinePageState extends State<RoutinePage> {
     }
   }
 
+  Future<void> _logout() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.remove('username');
+    await prefs.remove('token');
+    Navigator.pushReplacementNamed(context, '/login');
+  }
+
   @override
   Widget build(BuildContext context) {
     final height = MediaQuery.of(context).size.height;
@@ -49,6 +57,12 @@ class _RoutinePageState extends State<RoutinePage> {
       appBar: AppBar(
         title: Text('Routine'),
         backgroundColor: Colors.indigo,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.logout),
+            onPressed: _logout,
+          ),
+        ],
       ),
       body: isLoading
           ? Center(child: CircularProgressIndicator())
