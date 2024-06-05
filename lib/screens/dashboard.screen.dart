@@ -3,9 +3,22 @@ import 'package:flutter_application_routinggp/components/sidebar.components.dart
 import 'package:flutter_application_routinggp/screens/deploiement.screen.dart';
 import 'package:flutter_application_routinggp/screens/routine.screen.dart';
 import 'package:flutter_application_routinggp/screens/routineform.screen.dart';
+import 'package:flutter_application_routinggp/screens/profile.screen.dart'; // Import the profile screen
+import 'package:shared_preferences/shared_preferences.dart'; // Import shared_preferences
+import 'package:flutter_application_routinggp/screens/login.screen.dart'; // Import the login screen
 
 class Dashboard extends StatelessWidget {
   Dashboard({super.key});
+
+  Future<void> _logout(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('user'); // Remove the user data from shared_preferences
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => LoginPage()),
+      (Route<dynamic> route) => false,
+    ); // Redirect to the login page
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,17 +66,41 @@ class Dashboard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(15),
-                              color: Colors.white,
-                              image: const DecorationImage(
-                                image:
-                                    AssetImage("assets/images/others/user.png"),
+                          PopupMenuButton<String>(
+                            onSelected: (String result) {
+                              if (result == 'profile') {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (context) => ProfilePage()),
+                                );
+                              } else if (result == 'logout') {
+                                _logout(context);
+                              }
+                            },
+                            icon: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(15),
+                                color: Colors.white,
+                                image: const DecorationImage(
+                                  image: AssetImage(
+                                      "assets/images/others/user.png"),
+                                ),
                               ),
+                              height: 50,
+                              width: 40,
                             ),
-                            height: 50,
-                            width: 40,
+                            itemBuilder: (BuildContext context) =>
+                                <PopupMenuEntry<String>>[
+                              const PopupMenuItem<String>(
+                                value: 'profile',
+                                child: Text('Profil'),
+                              ),
+                              const PopupMenuItem<String>(
+                                value: 'logout',
+                                child: Text('Déconnexion'),
+                              ),
+                            ],
                           ),
                         ],
                       ),

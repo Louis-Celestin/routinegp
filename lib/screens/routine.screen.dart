@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter_application_routinggp/models/routine.models.dart';
-import 'package:flutter_application_routinggp/screens/routineform.screen.dart';
+import 'package:flutter_application_routinggp/consts/env.const.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_application_routinggp/models/routine.models.dart';
+import 'routineform.screen.dart'; // Assurez-vous que ce chemin est correct
 
 class RoutinePage extends StatefulWidget {
   @override
@@ -23,29 +24,35 @@ class _RoutinePageState extends State<RoutinePage> {
   }
 
   void loadRoutineData() async {
-    final response =
-        await http.get(Uri.parse('http://172.31.1.26:5500/api/routines'));
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final int? agentId = prefs.getInt('agentId');
 
-    if (response.statusCode == 200) {
-      try {
-        final List<dynamic> jsonData = json.decode(response.body);
-        setState(() {
-          routines = jsonData.map((data) => Routine.fromJson(data)).toList();
-          isLoading = false;
-        });
-      } catch (e) {
-        print('Failed to parse routines: $e');
+    if (agentId != null) {
+      final response = await http.get(
+        Uri.parse(baseUrl + '/routines'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        try {
+          final List<dynamic> jsonData = json.decode(response.body);
+          setState(() {
+            routines = jsonData.map((data) => Routine.fromJson(data)).toList();
+            isLoading = false;
+          });
+          print(routines);
+        } catch (e) {
+          print('Failed to parse routines: $e');
+        }
+      } else {
+        print('Failed to load routines: ${response.statusCode}');
+        print('Response body: ${response.body}');
       }
     } else {
-      print('Failed to load routines');
+      print('Failed to get agentId from preferences');
     }
-  }
-
-  Future<void> _logout() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.remove('username');
-    await prefs.remove('token');
-    Navigator.pushReplacementNamed(context, '/login');
   }
 
   @override
@@ -57,12 +64,6 @@ class _RoutinePageState extends State<RoutinePage> {
       appBar: AppBar(
         title: Text('Routine'),
         backgroundColor: Colors.indigo,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.logout),
-            onPressed: _logout,
-          ),
-        ],
       ),
       body: isLoading
           ? Center(child: CircularProgressIndicator())

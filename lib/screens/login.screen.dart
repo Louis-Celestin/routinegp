@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_application_routinggp/consts/env.const.dart';
 import 'package:flutter_application_routinggp/screens/dashboard.screen.dart';
 import 'package:flutter_application_routinggp/screens/resetpassword.screen.dart';
 import 'package:http/http.dart' as http;
@@ -26,7 +27,7 @@ class _LoginPageState extends State<LoginPage> {
 
       try {
         final response = await http.post(
-          Uri.parse('http://172.31.1.26:5500/api/login'),
+          Uri.parse(baseUrl + '/login'),
           headers: {
             'Content-Type': 'application/json',
           },
@@ -39,9 +40,13 @@ class _LoginPageState extends State<LoginPage> {
 
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
+          // print(data['agent_user_id']);
           final SharedPreferences prefs = await SharedPreferences.getInstance();
-          await prefs.setString('username', data['username'] ?? '');
+          await prefs.setString('username', data['username_user'] ?? '');
           await prefs.setString('token', data['token'] ?? '');
+          await prefs.setInt("agentId", data['agent_user_id']);
+          // print(prefs.getInt("agentId"));
+          // await prefs.setInt("commercialId", data['']);
 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Connexion réussie')),
@@ -53,8 +58,12 @@ class _LoginPageState extends State<LoginPage> {
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Échec de la connexion')),
+            SnackBar(
+                content: Text("Nom d\'utilisateur ou mot de passe incorrect")),
           );
+          setState(() {
+            _isLoading = false;
+          });
         }
       } catch (e) {
         setState(() {

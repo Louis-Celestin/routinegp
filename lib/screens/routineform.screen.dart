@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_application_routinggp/consts/env.const.dart';
 import 'package:flutter_application_routinggp/models/routine.models.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:select_form_field/select_form_field.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:permission_handler/permission_handler.dart';
 
 class RoutineFormPage extends StatefulWidget {
   @override
@@ -12,6 +15,7 @@ class RoutineFormPage extends StatefulWidget {
 
 class _RoutineFormPageState extends State<RoutineFormPage> {
   final _formKey = GlobalKey<FormState>();
+  TextEditingController? _controller;
   int commercialId = 0;
   String pointMarchand = '';
   String veilleConcurrentielle = '';
@@ -19,27 +23,93 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
   double longitudeReel = 0.0;
   List<Tpe> tpeList = [];
   bool _isLoading = false;
+  List<Map<String, dynamic>> _pointsMarchand = [];
+  String? _selectedPointMarchand;
+
+  final List<Map<String, dynamic>> _items = [
+    {
+      'value': 'N/A',
+      'label': 'N/A',
+    },
+    {
+      'value': 'MOOV',
+      'label': 'Moov',
+    },
+    {
+      'value': 'MTN',
+      'label': 'MTN',
+    },
+    {
+      'value': 'ORANGE',
+      'label': 'Orange',
+    },
+    {
+      'value': 'WAVE',
+      'label': 'Wave',
+    },
+  ];
 
   @override
   void initState() {
     super.initState();
-    _requestLocationPermission();
+    _loadCommercialId();
+    _checkLocationPermission();
+    _loadPointsMarchand();
+    _controller = TextEditingController(text: '2');
   }
 
-  Future<void> _requestLocationPermission() async {
-    var status = await Permission.location.status;
-    if (status.isDenied) {
-      if (await Permission.location.request().isGranted) {
-        _getCurrentLocation();
+  Future<void> _loadPointsMarchand() async {
+    try {
+      final response = await http.post(
+        Uri.parse(baseUrl + '/getpm'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          // Body parameters if any
+          'latitudeTelephone': 5.2973114754742,
+          'longitudeTelephone': -3.972523960301,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        print(data);
+        setState(() {
+          _pointsMarchand = data.map((point) {
+            return {
+              'value': point['POINT_MARCHAND'],
+              'label': point['POINT_MARCHAND'],
+            };
+          }).toList();
+        });
+      } else {
+        print('Failed to load points marchand: ${response.statusCode}');
       }
-    } else if (status.isGranted) {
-      _getCurrentLocation();
-    } else if (status.isPermanentlyDenied) {
-      openAppSettings();
+    } catch (e) {
+      print('Error loading points marchand: $e');
     }
   }
 
-  void _getCurrentLocation() async {
+  Future<void> _loadCommercialId() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      commercialId = prefs.getInt('agentId') ?? 0;
+    });
+  }
+
+  Future<void> _checkLocationPermission() async {
+    PermissionStatus status = await Permission.location.request();
+
+    if (status.isGranted) {
+      _getCurrentLocation();
+    } else {
+      // Handle the case where the user denied the permission
+      print('Location permission denied');
+    }
+  }
+
+  Future<void> _getCurrentLocation() async {
     try {
       Position position = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high);
@@ -85,7 +155,7 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
 
       try {
         final response = await http.post(
-          Uri.parse('http://172.31.1.55:5500/api/makeRoutine'),
+          Uri.parse(baseUrl + '/makeRoutine'),
           headers: {
             'Content-Type': 'application/json',
           },
@@ -101,9 +171,9 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
           Navigator.pop(context, true);
         } else {
           print(response.body);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Échec de l\'enregistrement de la routine')),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(response.body.characters.string),
+          ));
         }
       } catch (e) {
         setState(() {
@@ -114,12 +184,6 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
         );
       }
     }
-  }
-
-  void _removeTpe(int index) {
-    setState(() {
-      tpeList.removeAt(index);
-    });
   }
 
   @override
@@ -137,40 +201,41 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
             children: [
               TextFormField(
                 decoration: InputDecoration(labelText: 'Commercial ID'),
+                initialValue: commercialId.toString(),
                 keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value!.isEmpty) {
-                    return 'Veuillez entrer l\'ID du commercial';
-                  }
-                  return null;
-                },
-                onSaved: (value) {
-                  commercialId = int.parse(value!);
-                },
+                enabled: false,
               ),
-              TextFormField(
-                decoration: InputDecoration(labelText: 'Point Marchand'),
-                validator: (value) {
-                  if (value!.isEmpty) {
-                    return 'Veuillez entrer le point marchand';
-                  }
-                  return null;
+              DropdownButtonFormField<String>(
+                value: _selectedPointMarchand,
+                items: _pointsMarchand.map((point) {
+                  return DropdownMenuItem<String>(
+                    value: point['value'],
+                    child: Text(point['label']),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedPointMarchand = value;
+                    pointMarchand = value!;
+                  });
                 },
-                onSaved: (value) {
-                  pointMarchand = value!;
-                },
+                decoration: InputDecoration(
+                  hintText: 'Sélectionnez un point marchand',
+                ),
               ),
-              TextFormField(
-                decoration:
-                    InputDecoration(labelText: 'Veille Concurrentielle'),
-                validator: (value) {
-                  if (value!.isEmpty) {
-                    return 'Veuillez entrer la veille concurrentielle';
-                  }
-                  return null;
+              SelectFormField(
+                type: SelectFormFieldType.dropdown,
+                initialValue: 'N/A',
+                labelText: 'Veille Concurrentielle',
+                items: _items,
+                onChanged: (value) {
+                  print(value);
+                  setState(() {
+                    veilleConcurrentielle = value;
+                  });
                 },
                 onSaved: (value) {
-                  veilleConcurrentielle = value!;
+                  veilleConcurrentielle = value.toString();
                 },
               ),
               TextFormField(
@@ -196,16 +261,7 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Divider(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('TPE ${index + 1}'),
-                        IconButton(
-                          icon: Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _removeTpe(index),
-                        ),
-                      ],
-                    ),
+                    Text('TPE ${index + 1}'),
                     TextFormField(
                       decoration: InputDecoration(labelText: 'État Chargeur'),
                       validator: (value) {
