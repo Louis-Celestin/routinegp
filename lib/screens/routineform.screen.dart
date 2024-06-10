@@ -261,7 +261,18 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Divider(),
-        Text('TPE ${tpeList.indexOf(tpe) + 1}'),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('TPE ${tpeList.indexOf(tpe) + 1}'),
+            IconButton(
+              icon: Icon(Icons.delete, color: Colors.red),
+              onPressed: () {
+                _removeTpe(tpeList.indexOf(tpe));
+              },
+            ),
+          ],
+        ),
         DropdownButtonFormField<String>(
           value: tpe.etatTpeRoutine.isEmpty ? null : tpe.etatTpeRoutine,
           items: _etatItems.map((item) {
