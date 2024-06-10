@@ -25,6 +25,10 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
   bool _isLoading = false;
   List<Map<String, dynamic>> _pointsMarchand = [];
   String? _selectedPointMarchand;
+  List<String> _serialNumbers = [];
+  List<Widget> _tpeForms = [];
+  bool? _visibleProblemeMobile = false;
+  bool _visibleProblemeBancaire = false;
 
   final List<Map<String, dynamic>> _items = [
     {
@@ -49,9 +53,20 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
     },
   ];
 
+  final List<Map<String, dynamic>> _etatItems = [
+    {'value': 'OK', 'label': 'OK'},
+    {'value': 'NON OK', 'label': 'NON OK'},
+  ];
+
+  final List<Map<String, dynamic>> _problemeItems = [
+    {'value': 'OUI', 'label': 'OUI'},
+    {'value': 'NON', 'label': 'NON'},
+  ];
+
   @override
   void initState() {
     super.initState();
+    _getCurrentLocation();
     _loadCommercialId();
     _checkLocationPermission();
     _loadPointsMarchand();
@@ -61,12 +76,11 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
   Future<void> _loadPointsMarchand() async {
     try {
       final response = await http.post(
-        Uri.parse(baseUrl + '/getpm'),
+        Uri.parse(baseLocalUrl + '/getpm'),
         headers: {
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          // Body parameters if any
           'latitudeTelephone': 5.2973114754742,
           'longitudeTelephone': -3.972523960301,
         }),
@@ -74,7 +88,6 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        print(data);
         setState(() {
           _pointsMarchand = data.map((point) {
             return {
@@ -124,7 +137,7 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
 
   void _addTpe() {
     setState(() {
-      tpeList.add(Tpe(
+      Tpe tpe = Tpe(
         problemeBancaire: '',
         descriptionProblemeBancaire: '',
         problemeMobile: '',
@@ -132,7 +145,16 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
         idTerminal: '',
         etatTpeRoutine: '',
         etatChargeurTpeRoutine: '',
-      ));
+      );
+      tpeList.add(tpe);
+      _tpeForms.add(_buildTpeForm(tpe));
+    });
+  }
+
+  void _removeTpe(int index) {
+    setState(() {
+      tpeList.removeAt(index);
+      _tpeForms.removeAt(index);
     });
   }
 
@@ -155,7 +177,7 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
 
       try {
         final response = await http.post(
-          Uri.parse(baseUrl + '/makeRoutine'),
+          Uri.parse(baseLocalUrl + '/makeRoutine'),
           headers: {
             'Content-Type': 'application/json',
           },
@@ -186,6 +208,166 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
     }
   }
 
+  Future<void> _fetchSerialNumbers(String selectedPointMarchand) async {
+    try {
+      final response = await http.post(
+        Uri.parse(baseLocalUrl + '/getSnBypointMarchand'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'pointMarchand': selectedPointMarchand,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        setState(() {
+          _serialNumbers = List<String>.from(data
+              .map((serialNumber) => serialNumber['SERIAL_NUMBER'])
+              .toList());
+        });
+        _generateTpeForms();
+      } else {
+        print('Failed to load serial numbers: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error loading serial numbers: $e');
+    }
+  }
+
+  void _generateTpeForms() {
+    _tpeForms.clear();
+    tpeList.clear();
+
+    for (String serialNumber in _serialNumbers) {
+      Tpe tpe = Tpe(
+        problemeBancaire: '',
+        descriptionProblemeBancaire: '',
+        problemeMobile: '',
+        descriptionProblemeMobile: '',
+        idTerminal: serialNumber,
+        etatTpeRoutine: '',
+        etatChargeurTpeRoutine: '',
+      );
+      tpeList.add(tpe);
+      _tpeForms.add(_buildTpeForm(tpe));
+    }
+    setState(() {});
+  }
+
+  Widget _buildTpeForm(Tpe tpe) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(),
+        Text('TPE ${tpeList.indexOf(tpe) + 1}'),
+        DropdownButtonFormField<String>(
+          value: tpe.etatTpeRoutine.isEmpty ? null : tpe.etatTpeRoutine,
+          items: _etatItems.map((item) {
+            return DropdownMenuItem<String>(
+              value: item['value'],
+              child: Text(item['label']),
+            );
+          }).toList(),
+          onChanged: (value) {
+            setState(() {
+              tpe.etatTpeRoutine = value!;
+            });
+          },
+          decoration: InputDecoration(labelText: 'État TPE'),
+        ),
+        DropdownButtonFormField<String>(
+          value: tpe.problemeBancaire.isEmpty ? null : tpe.problemeBancaire,
+          items: _problemeItems.map((item) {
+            return DropdownMenuItem<String>(
+              value: item['value'],
+              child: Text(item['label']),
+            );
+          }).toList(),
+          onChanged: (value) {
+            setState(() {
+              tpe.problemeBancaire = value!;
+              _visibleProblemeBancaire = value == 'OUI';
+            });
+          },
+          decoration: InputDecoration(labelText: 'Problème Bancaire'),
+        ),
+        Visibility(
+          visible: tpe.problemeBancaire == 'OUI',
+          child: TextFormField(
+            decoration:
+                InputDecoration(labelText: 'Description Problème Bancaire'),
+            maxLines: 3,
+            onChanged: (value) {
+              setState(() {
+                tpe.descriptionProblemeBancaire = value;
+              });
+            },
+            validator: (value) {
+              if (tpe.problemeBancaire == 'OUI' &&
+                  (value == null || value.isEmpty)) {
+                return 'Description obligatoire si problème bancaire est OUI';
+              }
+              return null;
+            },
+          ),
+        ),
+        DropdownButtonFormField<String>(
+          value: tpe.problemeMobile.isEmpty ? null : tpe.problemeMobile,
+          items: _problemeItems.map((item) {
+            return DropdownMenuItem<String>(
+              value: item['value'],
+              child: Text(item['label']),
+            );
+          }).toList(),
+          onChanged: (value) {
+            setState(() {
+              tpe.problemeMobile = value!;
+              _visibleProblemeMobile = value == 'OUI';
+            });
+          },
+          decoration: InputDecoration(labelText: 'Problème Mobile'),
+        ),
+        Visibility(
+          visible: tpe.problemeMobile == 'OUI',
+          child: TextFormField(
+            decoration:
+                InputDecoration(labelText: 'Description Problème Mobile'),
+            maxLines: 3,
+            onChanged: (value) {
+              setState(() {
+                tpe.descriptionProblemeMobile = value;
+              });
+            },
+            validator: (value) {
+              if (tpe.problemeMobile == 'OUI' &&
+                  (value == null || value.isEmpty)) {
+                return 'Description obligatoire si problème mobile est OUI';
+              }
+              return null;
+            },
+          ),
+        ),
+        DropdownButtonFormField<String>(
+          value: tpe.idTerminal.isEmpty ? null : tpe.idTerminal,
+          items: _serialNumbers.map((serialNumber) {
+            return DropdownMenuItem<String>(
+              value: serialNumber,
+              child: Text(serialNumber),
+            );
+          }).toList(),
+          onChanged: (value) {
+            setState(() {
+              tpe.idTerminal = value!;
+            });
+          },
+          decoration: InputDecoration(labelText: 'ID Terminal'),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -199,11 +381,14 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
           key: _formKey,
           child: ListView(
             children: [
-              TextFormField(
-                decoration: InputDecoration(labelText: 'Commercial ID'),
-                initialValue: commercialId.toString(),
-                keyboardType: TextInputType.number,
-                enabled: false,
+              Visibility(
+                visible: false,
+                child: TextFormField(
+                  decoration: InputDecoration(labelText: 'Commercial ID'),
+                  initialValue: commercialId.toString(),
+                  keyboardType: TextInputType.number,
+                  enabled: false,
+                ),
               ),
               DropdownButtonFormField<String>(
                 value: _selectedPointMarchand,
@@ -217,6 +402,8 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
                   setState(() {
                     _selectedPointMarchand = value;
                     pointMarchand = value!;
+// Récupérer les numéros de série en fonction du point marchand sélectionné
+                    _fetchSerialNumbers(value);
                   });
                 },
                 decoration: InputDecoration(
@@ -238,126 +425,76 @@ class _RoutineFormPageState extends State<RoutineFormPage> {
                   veilleConcurrentielle = value.toString();
                 },
               ),
-              TextFormField(
-                decoration: InputDecoration(labelText: 'Latitude Réelle'),
-                keyboardType: TextInputType.number,
-                enabled: false,
-                initialValue:
-                    latitudeReel != null ? latitudeReel.toString() : '',
+              Visibility(
+                visible: false,
+                child: TextFormField(
+                  decoration: InputDecoration(labelText: 'Latitude Réelle'),
+                  keyboardType: TextInputType.number,
+                  enabled: false,
+                  initialValue:
+                      latitudeReel != null ? latitudeReel.toString() : '',
+                ),
               ),
-              TextFormField(
-                decoration: InputDecoration(labelText: 'Longitude Réelle'),
-                keyboardType: TextInputType.number,
-                enabled: false,
-                initialValue:
-                    longitudeReel != null ? longitudeReel.toString() : '',
+              Visibility(
+                visible: false,
+                child: TextFormField(
+                  decoration: InputDecoration(labelText: 'Longitude Réelle'),
+                  keyboardType: TextInputType.number,
+                  enabled: false,
+                  initialValue:
+                      longitudeReel != null ? longitudeReel.toString() : '',
+                ),
               ),
-              ...tpeList.asMap().entries.map((entry) {
-                int index = entry.key;
-                Tpe tpe = entry.value;
-
-                return Column(
-                  key: ValueKey(index),
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Divider(),
-                    Text('TPE ${index + 1}'),
-                    TextFormField(
-                      decoration: InputDecoration(labelText: 'État Chargeur'),
-                      validator: (value) {
-                        if (value!.isEmpty) {
-                          return 'Veuillez entrer l\'état du chargeur';
-                        }
-                        return null;
-                      },
-                      onSaved: (value) {
-                        tpeList[index].etatChargeurTpeRoutine = value!;
-                      },
-                    ),
-                    TextFormField(
-                      decoration: InputDecoration(labelText: 'État TPE'),
-                      validator: (value) {
-                        if (value!.isEmpty) {
-                          return 'Veuillez entrer l\'état du TPE';
-                        }
-                        return null;
-                      },
-                      onSaved: (value) {
-                        tpeList[index].etatTpeRoutine = value!;
-                      },
-                    ),
-                    TextFormField(
-                      decoration:
-                          InputDecoration(labelText: 'Problème Bancaire'),
-                      validator: (value) {
-                        if (value!.isEmpty) {
-                          return 'Veuillez entrer le problème bancaire';
-                        }
-                        return null;
-                      },
-                      onSaved: (value) {
-                        tpeList[index].problemeBancaire = value!;
-                      },
-                    ),
-                    TextFormField(
-                      decoration: InputDecoration(
-                          labelText: 'Description du Problème Bancaire'),
-                      onSaved: (value) {
-                        tpeList[index].descriptionProblemeBancaire = value!;
-                      },
-                    ),
-                    TextFormField(
-                      decoration: InputDecoration(labelText: 'Problème Mobile'),
-                      validator: (value) {
-                        if (value!.isEmpty) {
-                          return 'Veuillez entrer le problème mobile';
-                        }
-                        return null;
-                      },
-                      onSaved: (value) {
-                        tpeList[index].problemeMobile = value!;
-                      },
-                    ),
-                    TextFormField(
-                      decoration: InputDecoration(
-                          labelText: 'Description du Problème Mobile'),
-                      onSaved: (value) {
-                        tpeList[index].descriptionProblemeMobile = value!;
-                      },
-                    ),
-                    TextFormField(
-                      decoration: InputDecoration(labelText: 'ID Terminal'),
-                      validator: (value) {
-                        if (value!.isEmpty) {
-                          return 'Veuillez entrer l\'ID du terminal';
-                        }
-                        return null;
-                      },
-                      onSaved: (value) {
-                        tpeList[index].idTerminal = value!;
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                );
-              }).toList(),
+// Display the generated TPE forms
+              ..._tpeForms,
+              SizedBox(height: 20),
               ElevatedButton(
                 onPressed: _addTpe,
                 child: Text('Ajouter un TPE'),
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: 20),
               ElevatedButton(
                 onPressed: _isLoading ? null : _submitForm,
                 child: _isLoading
-                    ? CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      )
-                    : Text('Soumettre'),
+                    ? CircularProgressIndicator()
+                    : Text('Enregistrer la Routine'),
               ),
             ],
           ),
         ),
       ),
     );
+  }
+}
+
+class Tpe {
+  String problemeBancaire;
+  String descriptionProblemeBancaire;
+  String problemeMobile;
+  String descriptionProblemeMobile;
+  String idTerminal;
+  String etatTpeRoutine;
+  String etatChargeurTpeRoutine;
+
+  Tpe({
+    required this.problemeBancaire,
+    required this.descriptionProblemeBancaire,
+    required this.problemeMobile,
+    required this.descriptionProblemeMobile,
+    required this.idTerminal,
+    required this.etatTpeRoutine,
+    required this.etatChargeurTpeRoutine,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'problemeBancaire': problemeBancaire,
+      'descriptionProblemeBancaire': descriptionProblemeBancaire,
+      'problemeMobile': problemeMobile,
+      'descriptionProblemeMobile': descriptionProblemeMobile,
+      'idTerminal': idTerminal,
+      'etatTpeRoutine': etatTpeRoutine,
+      'etatChargeurTpeRoutine': etatChargeurTpeRoutine,
+    };
   }
 }

@@ -29,7 +29,7 @@ class _RoutinePageState extends State<RoutinePage> {
 
     if (agentId != null) {
       final response = await http.get(
-        Uri.parse(baseUrl + '/routines'),
+        Uri.parse(baseLocalUrl + '/routines'),
         headers: {
           'Content-Type': 'application/json',
         },
